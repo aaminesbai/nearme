@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.local
+.expo/
+dist/
+coverage/
+*.log
+apps/mobile/android/
+apps/mobile/ios/
+artifacts/
+test-results/
+playwright-report/

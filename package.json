@@ -1,0 +1,25 @@
+{
+  "name": "nearme",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @nearme/api --filter @nearme/mobile dev",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "pnpm --filter @nearme/api test",
+    "test:integration": "pnpm --filter @nearme/api test:integration",
+    "db:migrate": "pnpm --filter @nearme/api migrate",
+    "db:seed": "pnpm --filter @nearme/api seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "latest",
+    "eslint": "latest",
+    "prettier": "latest",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "latest"
+  }
+}

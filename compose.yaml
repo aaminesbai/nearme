@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_USER: nearme
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nearme_local_only}
+      POSTGRES_DB: nearme
+    ports:
+      - '127.0.0.1:55432:5432'
+    volumes:
+      - nearme_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nearme -d nearme']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  nearme_db:

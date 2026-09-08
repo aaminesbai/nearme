@@ -1,0 +1,36 @@
+{
+  "name": "@nearme/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx src/migrate.ts",
+    "seed": "tsx src/seed.ts",
+    "test": "tsx --test test/unit.test.ts",
+    "test:integration": "tsx --test test/integration.test.ts"
+  },
+  "dependencies": {
+    "@nearme/shared": "workspace:*",
+    "@nestjs/common": "12.0.1",
+    "@nestjs/core": "12.0.1",
+    "@nestjs/platform-express": "12.0.1",
+    "socket.io": "latest",
+    "pg": "latest",
+    "reflect-metadata": "latest",
+    "rxjs": "latest",
+    "dotenv": "latest",
+    "helmet": "latest",
+    "express-rate-limit": "latest",
+    "expo-server-sdk": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "tsx": "latest",
+    "@types/pg": "latest",
+    "@types/express": "latest",
+    "socket.io-client": "latest"
+  }
+}
