@@ -5,6 +5,7 @@ import {
   Body,
   Catch,
   Controller,
+  Delete,
   ExceptionFilter,
   Get,
   HttpException,
@@ -19,7 +20,15 @@ import type { Request, Response } from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { z, ZodError } from 'zod';
-import { pointSchema, profileSchema, pushSchema, radiusSchema } from '@nearme/shared';
+import {
+  changePasswordSchema,
+  loginSchema,
+  pointSchema,
+  profileSchema,
+  pushSchema,
+  radiusSchema,
+  registerSchema,
+} from '@nearme/shared';
 import { config } from './config';
 import { pool } from './db';
 import { data } from './service';
@@ -65,8 +74,34 @@ class ApiController {
     await pool.query('SELECT PostGIS_Version()');
     return { status: 'ok', database: 'postgis', demo: config.demo };
   }
-  @Post('users') register(@Body() body: unknown) {
-    return data.register(profileSchema.parse(body));
+  @Post('auth/register') register(@Body() body: unknown) {
+    return data.register(registerSchema.parse(body));
+  }
+  @Post('auth/login') async login(@Body() body: unknown) {
+    const input = loginSchema.parse(body);
+    const session = await data.login(input.username, input.password);
+    realtime.disconnectUser(session.user.id);
+    return session;
+  }
+  @Post('auth/logout') async logout(@Req() req: Request) {
+    const id = await identity(req, false);
+    const result = await data.logout(id);
+    realtime.disconnectUser(id);
+    return result;
+  }
+  @Post('users/me/password') async changePassword(@Req() req: Request, @Body() body: unknown) {
+    const input = changePasswordSchema.parse(body);
+    return data.changePassword(
+      await identity(req, false),
+      input.currentPassword,
+      input.newPassword,
+    );
+  }
+  @Delete('users/me') async deleteAccount(@Req() req: Request) {
+    const id = await identity(req, false);
+    await data.deleteAccount(id);
+    realtime.disconnectUser(id);
+    return { success: true };
   }
   @Get('users/me') async me(@Req() req: Request) {
     return data.me(await identity(req, false));
@@ -154,6 +189,7 @@ app.use(
   rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }),
 );
 app.use('/users', rateLimit({ windowMs: 60_000, limit: 40 }));
+app.use('/auth', rateLimit({ windowMs: 60_000, limit: 10 }));
 app.enableCors({ origin: config.origins });
 app.useGlobalFilters(new Errors());
 const realtime = new Realtime(app.getHttpServer());

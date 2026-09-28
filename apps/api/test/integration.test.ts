@@ -70,9 +70,10 @@ test('real PostGIS + REST + Socket.IO acceptance and safety', { timeout: 45_000 
       assert.equal((await request<{ database: string }>('/health')).database, 'postgis');
       for (const displayName of ['Alice', 'Bob', 'Carol'])
         users.push(
-          await request('/users', undefined, {
+          await request('/auth/register', undefined, {
             username: `test_${randomUUID().slice(0, 8)}`,
             displayName,
+            password: 'Integration_test_123',
           }),
         );
       await assert.rejects(request('/nearby?radius=500', users[0].token), /403/);

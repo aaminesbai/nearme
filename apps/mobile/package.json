@@ -25,6 +25,7 @@
     "expo-dev-client": "latest",
     "expo-device": "latest",
     "expo-font": "latest",
+    "expo-glass-effect": "~57.0.1",
     "expo-linking": "latest",
     "expo-location": "latest",
     "expo-notifications": "latest",

@@ -4,21 +4,13 @@ import { pool } from './db';
 import { config } from './config';
 if (!config.demo) throw new Error('Set DEMO_MODE=true outside production to seed');
 try {
-  const existing = await pool.query<{ id: string }>(
-    "SELECT id FROM users WHERE username='demo_anchor'",
+  const result = await pool.query<{ id: string }>(
+    `INSERT INTO users(username,display_name,avatar,bio,is_demo,charter_accepted_at,visible)
+     VALUES('demo_anchor','Bordeaux',6,'Local seed anchor',true,now(),false)
+     ON CONFLICT(username) DO UPDATE SET is_demo=true,token_hash=NULL,password_hash=NULL,visible=false
+     RETURNING id`,
   );
-  let id = existing.rows[0]?.id;
-  if (!id) {
-    const result = await data.register({
-      username: 'demo_anchor',
-      displayName: 'Bordeaux',
-      avatar: 6,
-      bio: 'Local seed anchor',
-    });
-    id = result.user.id;
-    await data.accept(id);
-    await data.updateProfile(id, { visible: false });
-  }
+  const id = result.rows[0].id;
   await data.location(id, BORDEAUX);
   await data.seed(id, BORDEAUX);
   console.log(

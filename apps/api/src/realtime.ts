@@ -198,6 +198,12 @@ export class Realtime {
       void this.refreshNow();
     }, 300);
   }
+  disconnectUser(userId: string) {
+    for (const socket of this.io.sockets.sockets.values())
+      if ((socket.data as Session).user.id === userId) socket.disconnect(true);
+    data.online.delete(userId);
+    this.refresh();
+  }
   private async refreshNow() {
     if (this.refreshing) return;
     this.refreshing = true;

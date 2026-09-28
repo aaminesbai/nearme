@@ -15,12 +15,15 @@ test('denied location has an explicit Bordeaux fallback on a compact viewport', 
   await page.setViewportSize({ width: 360, height: 640 });
   await page.context().grantPermissions([]);
   await page.goto('/');
-  await page.getByLabel('Ton prenom', { exact: true }).fill('Alex');
+  await page.getByRole('button', { name: 'Créer un compte' }).click();
+  await page.getByLabel('Ton prénom', { exact: true }).fill('Alex');
   await page.getByLabel('Ton pseudo', { exact: true }).fill(`qa_${Date.now().toString(36)}`);
+  await page.getByLabel('Mot de passe', { exact: true }).fill('NearMe_test_123');
+  await page.getByLabel('Confirmer le mot de passe', { exact: true }).fill('NearMe_test_123');
   const registration = page.waitForResponse(
-    (r) => r.url().endsWith('/users') && r.request().method() === 'POST',
+    (r) => r.url().endsWith('/auth/register') && r.request().method() === 'POST',
   );
-  await page.getByRole('button', { name: 'Faire connaissance' }).click();
+  await page.getByRole('button', { name: 'Créer mon compte' }).click();
   sessionToken = (await (await registration).json()).token;
   await page.getByRole('checkbox').click();
   await page.getByRole('button', { name: "Entrer dans l'app" }).click();
@@ -41,13 +44,17 @@ test('onboarding, consent, map radius, profile, realtime demo chat and visibilit
   await page.context().grantPermissions(['geolocation']);
   await page.context().setGeolocation({ latitude: 44.8378, longitude: -0.5792 });
   await page.goto('/');
-  await page.getByLabel('Ton prenom', { exact: true }).fill('Camille');
+  await page.getByRole('button', { name: 'Créer un compte' }).click();
+  await page.getByLabel('Ton prénom', { exact: true }).fill('Camille');
   await page.getByLabel('Ton pseudo', { exact: true }).fill(`qa_${Date.now().toString(36)}`);
+  await page.getByLabel('Mot de passe', { exact: true }).fill('NearMe_test_123');
+  await page.getByLabel('Confirmer le mot de passe', { exact: true }).fill('NearMe_test_123');
   await page.screenshot({ path: `artifacts/${info.project.name}-onboarding.png`, fullPage: true });
   const registration = page.waitForResponse(
-    (response) => response.url().endsWith('/users') && response.request().method() === 'POST',
+    (response) =>
+      response.url().endsWith('/auth/register') && response.request().method() === 'POST',
   );
-  await page.getByRole('button', { name: 'Faire connaissance' }).click();
+  await page.getByRole('button', { name: 'Créer mon compte' }).click();
   sessionToken = (await (await registration).json()).token;
   await expect(page.getByRole('button', { name: "Entrer dans l'app" })).toBeDisabled();
   await page.getByRole('checkbox').click();

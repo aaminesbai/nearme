@@ -21,7 +21,9 @@ export default function DiscoveryMap({ point, users, radius, recenter, onSelect 
         [point.latitude, point.longitude],
         15,
       );
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      const cartoKey = process.env.EXPO_PUBLIC_CARTO_API_KEY;
+      const tileKey = cartoKey ? `?key=${encodeURIComponent(cartoKey)}` : '';
+      L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png${tileKey}`, {
         attribution: '&copy; OpenStreetMap &copy; CARTO',
         maxZoom: 19,
       }).addTo(map.current);

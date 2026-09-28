@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   Pressable,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -10,6 +11,7 @@ import {
   type TextInputProps,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
 import { avatarUrls } from '@nearme/shared';
 export const colors = {
   bg: '#F5F7F7',
@@ -29,27 +31,36 @@ export const tokens = {
 };
 export const s = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 24, gap: 20 },
+  content: { padding: 24, gap: 18 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  title: { fontSize: 30, fontWeight: '800', color: colors.ink, letterSpacing: 0 },
+  title: { fontSize: 32, fontWeight: '800', color: colors.ink, letterSpacing: -0.6 },
   h2: { fontSize: 22, fontWeight: '700', color: colors.ink },
   body: { fontSize: 16, lineHeight: 24, color: colors.ink },
   muted: { fontSize: 14, lineHeight: 21, color: colors.muted },
-  label: { fontSize: 12, fontWeight: '700', color: colors.accent, letterSpacing: 0 },
-  card: { backgroundColor: colors.surface, borderRadius: 8, padding: 18, gap: 12 },
+  label: { fontSize: 11, fontWeight: '800', color: colors.accent, letterSpacing: 1.1 },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   input: {
-    minHeight: 54,
-    backgroundColor: '#EDF2F0',
-    borderRadius: 8,
+    minHeight: 56,
+    backgroundColor: '#EDF3F0',
+    borderRadius: 16,
     paddingHorizontal: 16,
     color: colors.ink,
     fontSize: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   button: {
     backgroundColor: colors.accent,
-    borderRadius: 8,
-    minHeight: 54,
+    borderRadius: 18,
+    minHeight: 56,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
@@ -58,16 +69,42 @@ export const s = StyleSheet.create({
   },
   buttonText: { color: 'white', fontSize: 16, fontWeight: '700' },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
   },
   divider: { height: 1, backgroundColor: colors.line },
+  glassSurface: {
+    backgroundColor: 'rgba(255,255,255,0.54)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.78)',
+    borderRadius: 24,
+    padding: 18,
+    gap: 12,
+    overflow: 'hidden',
+  },
 });
 export type IconName = ComponentProps<typeof Ionicons>['name'];
+export function GlassSurface({
+  children,
+  style,
+  tintColor = 'rgba(255,255,255,0.52)',
+}: {
+  children?: ReactNode;
+  style?: ComponentProps<typeof View>['style'];
+  tintColor?: string;
+}) {
+  if (Platform.OS === 'ios' && isLiquidGlassAvailable() && isGlassEffectAPIAvailable())
+    return (
+      <GlassView glassEffectStyle="regular" tintColor={tintColor} style={[s.glassSurface, style]}>
+        {children}
+      </GlassView>
+    );
+  return <View style={[s.card, style]}>{children}</View>;
+}
 export function Icon({
   name,
   size = 22,

@@ -1,7 +1,7 @@
 import { Redirect, Tabs } from 'expo-router';
 import { Text, View } from 'react-native';
 import { useApp } from '../../src/state';
-import { colors, Icon, Loading } from '../../src/ui';
+import { colors, GlassSurface, Icon, Loading } from '../../src/ui';
 export default function TabLayout() {
   const { user, ready, connected } = useApp();
   if (!ready) return <Loading />;
@@ -26,9 +26,24 @@ export default function TabLayout() {
           headerShown: false,
           tabBarActiveTintColor: colors.accent,
           tabBarInactiveTintColor: colors.muted,
+          tabBarBackground: () => (
+            <GlassSurface
+              style={{
+                flex: 1,
+                padding: 0,
+                gap: 0,
+                borderRadius: 0,
+                borderWidth: 0,
+                backgroundColor: 'rgba(255,255,255,0.72)',
+              }}
+            />
+          ),
           tabBarStyle: {
-            backgroundColor: 'white',
-            borderTopColor: colors.line,
+            position: 'absolute',
+            backgroundColor: 'transparent',
+            borderTopColor: 'transparent',
+            borderTopWidth: 0,
+            elevation: 0,
             height: 78,
             paddingTop: 10,
             paddingBottom: 14,

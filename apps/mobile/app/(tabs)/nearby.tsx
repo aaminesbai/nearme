@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { formatDistance } from '@nearme/shared';
 import { useApp } from '../../src/state';
-import { Avatar, colors, Empty, Icon, s } from '../../src/ui';
+import { Avatar, colors, Empty, GlassSurface, Icon, s } from '../../src/ui';
 import { RadiusControl } from '../../src/RadiusControl';
 import { locate } from '../../src/location';
 export default function Nearby() {
@@ -13,7 +13,10 @@ export default function Nearby() {
       <FlatList
         data={nearby}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[s.content, { maxWidth: 720, width: '100%', alignSelf: 'center' }]}
+        contentContainerStyle={[
+          s.content,
+          { maxWidth: 720, width: '100%', alignSelf: 'center', paddingBottom: 110 },
+        ]}
         onRefresh={() => void locate(locationState === 'demo')}
         refreshing={locationState === 'loading'}
         ListHeaderComponent={
@@ -38,27 +41,29 @@ export default function Nearby() {
           </Empty>
         }
         renderItem={({ item }) => (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Voir ${item.displayName}`}
-            onPress={() => router.push(`/person/${item.id}`)}
-            style={[s.card, s.row, { marginTop: 12 }]}
-          >
-            <Avatar avatar={item.avatar} size={68} online={item.online} />
-            <View style={{ flex: 1, gap: 5 }}>
-              <Text style={{ color: colors.ink, fontWeight: '700', fontSize: 19 }}>
-                {item.displayName}
-              </Text>
-              <Text style={s.muted}>
-                {item.online ? 'En ligne' : 'Recemment ici'}
-                {item.isDemo ? ' · Demo' : ''}
-              </Text>
-              <Text style={[s.label, { marginTop: 2 }]}>
-                A environ {formatDistance(item.distance)}
-              </Text>
-            </View>
-            <Icon name="chevron-forward" size={20} color={colors.muted} />
-          </Pressable>
+          <GlassSurface style={{ padding: 0, gap: 0, marginTop: 12 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Voir ${item.displayName}`}
+              onPress={() => router.push(`/person/${item.id}`)}
+              style={[s.row, { padding: 16 }]}
+            >
+              <Avatar avatar={item.avatar} size={68} online={item.online} />
+              <View style={{ flex: 1, gap: 5 }}>
+                <Text style={{ color: colors.ink, fontWeight: '700', fontSize: 19 }}>
+                  {item.displayName}
+                </Text>
+                <Text style={s.muted}>
+                  {item.online ? 'En ligne' : 'Récemment ici'}
+                  {item.isDemo ? ' · Démo' : ''}
+                </Text>
+                <Text style={[s.label, { marginTop: 2 }]}>
+                  À environ {formatDistance(item.distance)}
+                </Text>
+              </View>
+              <Icon name="chevron-forward" size={20} color={colors.muted} />
+            </Pressable>
+          </GlassSurface>
         )}
       />
     </SafeAreaView>

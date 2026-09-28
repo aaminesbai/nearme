@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -21,20 +21,100 @@ import { pool, pairTransaction } from './db';
 import { config } from './config';
 
 const columns = `u.id, u.username, u.display_name AS "displayName", u.avatar, u.bio, u.visible,
-  (u.charter_accepted_at IS NOT NULL) AS "charterAccepted", u.is_demo AS "isDemo"`;
+  (u.charter_accepted_at IS NOT NULL AND u.charter_version = '${CHARTER_VERSION}') AS "charterAccepted",
+  u.charter_version AS "charterVersion", u.is_demo AS "isDemo"`;
 export const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 export const pairKey = (a: string, b: string) => [a, b].sort().join(':');
 export const messageColumns = `id, conversation_id AS "conversationId", sender_id AS "senderId", client_id AS "clientId", body, created_at AS "createdAt"`;
 
+function derivePassword(password: string, salt: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) =>
+    scrypt(password, salt, 64, (error, key) => (error ? reject(error) : resolve(key as Buffer))),
+  );
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16);
+  const hash = await derivePassword(password, salt);
+  return `scrypt$${salt.toString('base64url')}$${hash.toString('base64url')}`;
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [algorithm, saltValue, hashValue, extra] = stored.split('$');
+  if (algorithm !== 'scrypt' || !saltValue || !hashValue || extra !== undefined) return false;
+  try {
+    const salt = Buffer.from(saltValue, 'base64url');
+    const expected = Buffer.from(hashValue, 'base64url');
+    if (salt.length !== 16 || expected.length !== 64) return false;
+    const actual = await derivePassword(password, salt);
+    return timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
+}
+
 export class DataService {
   online = new Set<string>();
-  async register(input: ProfileInput) {
+  async register(input: ProfileInput & { password: string }) {
     const token = randomBytes(32).toString('base64url');
+    const passwordHash = await hashPassword(input.password);
     const result = await pool.query<{ id: string }>(
-      `INSERT INTO users(username,display_name,avatar,bio,token_hash) VALUES($1,$2,$3,$4,$5) RETURNING id`,
-      [input.username, input.displayName, input.avatar, input.bio, tokenHash(token)],
+      `INSERT INTO users(username,display_name,avatar,bio,token_hash,password_hash) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [input.username, input.displayName, input.avatar, input.bio, tokenHash(token), passwordHash],
     );
     return { user: await this.me(result.rows[0].id), token };
+  }
+  async login(username: string, password: string) {
+    const { rows } = await pool.query<{ id: string; passwordHash: string | null }>(
+      'SELECT id,password_hash AS "passwordHash" FROM users WHERE username=$1 AND NOT is_demo',
+      [username],
+    );
+    const account = rows[0];
+    if (!account?.passwordHash || !(await verifyPassword(password, account.passwordHash)))
+      throw new UnauthorizedException('Pseudo ou mot de passe incorrect');
+    const token = randomBytes(32).toString('base64url');
+    await pool.query('UPDATE users SET token_hash=$2 WHERE id=$1', [account.id, tokenHash(token)]);
+    return { user: await this.me(account.id), token };
+  }
+  async logout(id: string) {
+    await pool.query('UPDATE users SET token_hash=NULL WHERE id=$1', [id]);
+    return { success: true };
+  }
+  async changePassword(id: string, currentPassword: string | undefined, newPassword: string) {
+    const { rows } = await pool.query<{ passwordHash: string | null }>(
+      'SELECT password_hash AS "passwordHash" FROM users WHERE id=$1 AND NOT is_demo',
+      [id],
+    );
+    if (!rows[0]) throw new NotFoundException('Profil introuvable');
+    if (
+      rows[0].passwordHash &&
+      (!currentPassword || !(await verifyPassword(currentPassword, rows[0].passwordHash)))
+    )
+      throw new UnauthorizedException('Mot de passe actuel incorrect');
+    await pool.query('UPDATE users SET password_hash=$2 WHERE id=$1', [
+      id,
+      await hashPassword(newPassword),
+    ]);
+    return { success: true };
+  }
+  async deleteAccount(id: string) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM reports WHERE reporter_id=$1 OR reported_id=$1', [id]);
+      await client.query(
+        'DELETE FROM conversations WHERE id IN (SELECT conversation_id FROM conversation_members WHERE user_id=$1)',
+        [id],
+      );
+      await client.query('DELETE FROM users WHERE id=$1 AND NOT is_demo', [id]);
+      await client.query('COMMIT');
+      this.online.delete(id);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
   async authenticate(token: string | undefined): Promise<User> {
     if (!token || token.length > 200) throw new UnauthorizedException('Session manquante');

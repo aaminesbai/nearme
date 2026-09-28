@@ -2,7 +2,7 @@ import { z } from 'zod';
 export const MIN_RADIUS = 50;
 export const MAX_RADIUS = 5000;
 export const STALE_LOCATION_MINUTES = 12;
-export const CHARTER_VERSION = '2026-09-v1';
+export const CHARTER_VERSION = '2026-09-v2';
 export const BORDEAUX = { latitude: 44.8378, longitude: -0.5792 };
 export const radiusSchema = z.coerce.number().finite().min(MIN_RADIUS).max(MAX_RADIUS);
 export const pointSchema = z.object({
@@ -18,6 +18,20 @@ export const profileSchema = z.object({
   displayName: z.string().trim().min(2).max(40),
   avatar: z.number().int().min(0).max(7).default(0),
   bio: z.string().trim().max(160).default(''),
+});
+export const passwordSchema = z.string().min(8).max(128);
+export const registerSchema = profileSchema.extend({ password: passwordSchema });
+export const loginSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9_]{3,24}$/),
+  password: z.string().min(1).max(128),
+});
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().max(128).optional(),
+  newPassword: passwordSchema,
 });
 export const messageSchema = z.object({
   conversationId: z.uuid(),
@@ -35,6 +49,7 @@ export interface User extends ProfileInput {
   id: string;
   visible: boolean;
   charterAccepted: boolean;
+  charterVersion: string | null;
   isDemo: boolean;
 }
 export interface NearbyUser extends User {

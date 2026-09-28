@@ -7,7 +7,17 @@ import DiscoveryMap from '../../src/DiscoveryMap';
 import { RadiusControl } from '../../src/RadiusControl';
 import { DEMO, useApp } from '../../src/state';
 import { locate } from '../../src/location';
-import { Avatar, Button, colors, Empty, ErrorText, IconButton, Loading, s } from '../../src/ui';
+import {
+  Avatar,
+  Button,
+  colors,
+  Empty,
+  ErrorText,
+  GlassSurface,
+  IconButton,
+  Loading,
+  s,
+} from '../../src/ui';
 export default function MapScreen() {
   const { point, nearby, radius, user, locationState, locationError } = useApp();
   const insets = useSafeAreaInsets();
@@ -59,41 +69,30 @@ export default function MapScreen() {
         style={{ position: 'absolute', top: insets.top + 16, left: 22, right: 22, gap: 12 }}
       >
         <View style={s.between}>
-          <View
-            style={{
-              backgroundColor: 'white',
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              borderRadius: 8,
-            }}
-          >
+          <GlassSurface style={{ paddingHorizontal: 18, paddingVertical: 12, gap: 2 }}>
             <Text style={s.label}>LES RENCONTRES DU COIN</Text>
             <Text style={[s.h2, { marginTop: 3 }]}>
               NearMe<Text style={{ color: colors.coral }}>.</Text>
             </Text>
-          </View>
-          <View style={{ padding: 4, backgroundColor: 'white', borderRadius: 32 }}>
+          </GlassSurface>
+          <GlassSurface style={{ padding: 4, gap: 0, borderRadius: 32 }}>
             {user && <Avatar avatar={user.avatar} size={44} online={user.visible} />}
-          </View>
+          </GlassSurface>
         </View>
         {locationState === 'demo' && (
-          <Text
-            style={{
-              alignSelf: 'flex-start',
-              backgroundColor: '#FFF0DA',
-              padding: 8,
-              borderRadius: 8,
-              color: '#805B25',
-              fontSize: 12,
-            }}
+          <GlassSurface
+            style={{ alignSelf: 'flex-start', padding: 10, gap: 0 }}
+            tintColor="#FFF0DA"
           >
-            Bordeaux · mode demo
-          </Text>
+            <Text style={{ color: '#805B25', fontSize: 12, fontWeight: '700' }}>
+              Bordeaux · mode demo
+            </Text>
+          </GlassSurface>
         )}
         {user?.visible === false && (
-          <Text style={{ backgroundColor: 'white', padding: 10, color: colors.muted }}>
-            Tu es invisible pour les autres.
-          </Text>
+          <GlassSurface style={{ padding: 12, gap: 0 }}>
+            <Text style={s.muted}>Tu es invisible pour les autres.</Text>
+          </GlassSurface>
         )}
       </View>
       {point && (
@@ -107,39 +106,34 @@ export default function MapScreen() {
       )}
       {point &&
         (locationState === 'error' || locationState === 'stale' || locationState === 'denied') && (
-          <View
+          <GlassSurface
             style={{
               position: 'absolute',
               top: insets.top + 120,
               left: 22,
               right: 22,
-              backgroundColor: 'white',
-              padding: 12,
-              borderRadius: 8,
-              gap: 8,
+              padding: 16,
             }}
           >
             <Text style={s.muted}>Position non actualisee.</Text>
             <ErrorText error={locationError} />
             <Button title="Actualiser" onPress={() => void locate()} />
-          </View>
+          </GlassSurface>
         )}
       {point && (
-        <View
+        <GlassSurface
           style={{
             position: 'absolute',
-            bottom: 20,
+            bottom: insets.bottom + 96,
             left: 20,
             right: 20,
             maxWidth: 420,
-            backgroundColor: 'white',
-            borderRadius: 8,
             padding: 20,
             boxShadow: '0 6px 28px rgba(25,58,55,0.12)',
           }}
         >
           <RadiusControl />
-        </View>
+        </GlassSurface>
       )}
     </View>
   );

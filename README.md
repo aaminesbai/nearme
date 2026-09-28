@@ -44,6 +44,10 @@ For a detached Windows preview after database setup, run `./scripts/start-local.
 
 Migration runner executes sorted SQL files transactionally with an advisory lock and `schema_migrations` ledger. Reruns are safe. Seed reruns update the same five profiles.
 
+## Accounts
+
+On a new install, choose **Se connecter** or **Créer un compte**. Accounts use a unique username and a password of at least eight characters; no email address is collected. Passwords are stored as salted scrypt hashes, and bearer sessions are kept in SecureStore on iOS/Android (local browser storage on web). A login replaces the account's previous active session. Existing profiles from before password login can set a password in **Mon profil** while their old session is still active. The profile settings also provide logout and permanent account deletion; deletion removes the profile's locations, push tokens, conversations/messages, and related reports.
+
 ## Environment
 
 | Variable                     | Location                 | Purpose                                                                         |
@@ -55,6 +59,7 @@ Migration runner executes sorted SQL files transactionally with an advisory lock
 | `EXPO_ACCESS_TOKEN`          | API `.env`               | Optional enhanced Expo push security token                                      |
 | `EXPO_PUBLIC_API_URL`        | Mobile `.env`            | API URL reachable from this device                                              |
 | `EXPO_PUBLIC_DEMO_MODE`      | Mobile `.env`            | Show Bordeaux fallback and request isolated seed profiles                       |
+| `EXPO_PUBLIC_CARTO_API_KEY`  | Mobile `.env`            | Public CARTO raster tile key used by the web map                                |
 | `EXPO_PUBLIC_EAS_PROJECT_ID` | Mobile `.env`            | Your actual EAS project UUID, required for Expo push token                      |
 | `GOOGLE_MAPS_API_KEY`        | Mobile/build environment | Android Maps SDK key restricted by package/signing certificate                  |
 | `GOOGLE_SERVICES_JSON`       | Mobile/build environment | Path to Android FCM configuration file                                          |
@@ -191,3 +196,18 @@ See `VALIDATION.md` for observed results and remaining device-only checks. No iO
 - Avatars use public placeholder portraits from Pravatar. No uploaded personal photos are required. Native maps use platform providers; web map tiles use CARTO/OpenStreetMap with attribution. These external assets require internet; no user coordinates are placed in avatar URLs.
 - Approximate location is still sensitive. Production needs stronger privacy controls, retention/deletion policy, consent review, abuse limits and moderation before public release.
 - A development endpoint can place its own demo profiles but is unavailable in production. Disable both demo flags for real-use deployments.
+# Configure Expo Go on your local network
+
+To test the app on a phone with Expo Go, connect both the phone and the computer hosting the API to the same Wi-Fi network. Expo Go cannot reach an API at `localhost` or `127.0.0.1`; those addresses refer to the phone itself. Find your computer's local IPv4 address (for example, run `ipconfig` on Windows), then set it in `apps/mobile/.env`:
+
+```env
+EXPO_PUBLIC_API_URL=http://192.168.1.42:3000
+```
+
+Replace `192.168.1.42` with the address shown on your computer, and `3000` with the port actually exposed by the API. Allow incoming connections on that port in your firewall if needed. After changing `.env`, restart Expo and clear its cache:
+
+```bash
+pnpm --filter @nearme/mobile start -- --clear
+```
+
+Then scan the QR code with Expo Go. If your computer's IP address changes, update `EXPO_PUBLIC_API_URL` and restart Expo.
