@@ -5,7 +5,8 @@
     "moduleResolution": "Bundler",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "noEmit": true
+    "noEmit": true,
+    "outDir": "dist"
   },
   "include": ["src", "test"]
 }

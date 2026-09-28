@@ -1,0 +1,158 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+model User {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username          String               @unique
+  displayName       String               @map("display_name")
+  avatar            Int                  @default(0)
+  bio               String               @default("")
+  tokenHash         String?              @unique @map("token_hash")
+  tokenExpiresAt    DateTime?            @map("token_expires_at") @db.Timestamptz(6)
+  passwordHash      String?              @map("password_hash")
+  charterAcceptedAt DateTime?            @map("charter_accepted_at") @db.Timestamptz(6)
+  charterVersion    String?              @map("charter_version")
+  visible           Boolean              @default(true)
+  isDemo            Boolean              @default(false) @map("is_demo")
+  demoOwnerId       String?              @map("demo_owner") @db.Uuid
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  demoOwner         User?                @relation("DemoOwner", fields: [demoOwnerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  demoUsers         User[]               @relation("DemoOwner")
+  location          UserLocation?
+  memberships       ConversationMember[]
+  sentMessages      Message[]            @relation("MessageSender")
+  pushTokens        PushToken[]
+  blocksCreated     Block[]              @relation("Blocker")
+  blocksReceived    Block[]              @relation("Blocked")
+  reportsFiled      Report[]             @relation("Reporter")
+  reportsReceived   Report[]             @relation("Reported")
+  pushJobs          PushOutbox[]         @relation("PushRecipient")
+
+  @@map("users")
+}
+
+model UserLocation {
+  userId    String                               @id @map("user_id") @db.Uuid
+  location  Unsupported("geography(Point,4326)")
+  updatedAt DateTime                             @default(now()) @map("updated_at") @db.Timestamptz(6)
+  visible   Boolean                              @default(true)
+  user      User                                 @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([updatedAt], map: "user_locations_updated_idx")
+  @@index([location], type: Gist, map: "user_locations_geo_idx")
+  @@map("user_locations")
+}
+
+model Conversation {
+  id        String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pairKey   String               @unique @map("pair_key")
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  members   ConversationMember[]
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversationId String       @map("conversation_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  lastReadAt     DateTime     @default(now()) @map("last_read_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([conversationId, userId])
+  @@index([userId], map: "conversation_members_user_idx")
+  @@map("conversation_members")
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  senderId       String       @map("sender_id") @db.Uuid
+  clientId       String       @map("client_id") @db.Uuid
+  body           String
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pushOutbox     PushOutbox?
+
+  @@unique([senderId, clientId])
+  @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)], map: "messages_history_idx")
+  @@map("messages")
+}
+
+model PushToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  platform  String
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("push_tokens")
+}
+
+model Block {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([blockerId, blockedId])
+  @@map("blocks")
+}
+
+model Report {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporterId String   @map("reporter_id") @db.Uuid
+  reportedId String   @map("reported_id") @db.Uuid
+  reason     String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  reporter   User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reported   User     @relation("Reported", fields: [reportedId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("reports")
+}
+
+model PushOutbox {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipientId String        @map("recipient_id") @db.Uuid
+  messageId   String        @unique @map("message_id") @db.Uuid
+  status      String        @default("pending")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  availableAt DateTime      @default(now()) @map("available_at") @db.Timestamptz(6)
+  lockedAt    DateTime?     @map("locked_at") @db.Timestamptz(6)
+  attempts    Int           @default(0)
+  sentAt      DateTime?     @map("sent_at") @db.Timestamptz(6)
+  lastError   String?       @map("last_error")
+  recipient   User          @relation("PushRecipient", fields: [recipientId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  message     Message       @relation(fields: [messageId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  receipts    PushReceipt[]
+
+  @@index([status, availableAt], map: "push_outbox_pending_idx")
+  @@map("push_outbox")
+}
+
+model PushReceipt {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  outboxId    String     @map("outbox_id") @db.Uuid
+  ticketId    String     @unique @map("ticket_id")
+  token       String
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  nextCheckAt DateTime   @default(now()) @map("next_check_at") @db.Timestamptz(6)
+  completedAt DateTime?  @map("completed_at") @db.Timestamptz(6)
+  attempts    Int        @default(0)
+  outbox      PushOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([completedAt, nextCheckAt], map: "push_receipts_due_idx")
+  @@map("push_receipts")
+}

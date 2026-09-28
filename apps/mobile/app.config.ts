@@ -1,4 +1,9 @@
 import type { ExpoConfig } from 'expo/config';
+import { config as loadEnv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+
+loadEnv({ path: fileURLToPath(new URL('../../.env', import.meta.url)) });
+
 const projectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
 const development = process.env.EAS_BUILD_PROFILE !== 'production';
 const config: ExpoConfig = {

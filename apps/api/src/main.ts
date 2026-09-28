@@ -30,9 +30,10 @@ import {
   registerSchema,
 } from '@nearme/shared';
 import { config } from './config';
-import { pool } from './db';
+import { prisma } from './db';
 import { data } from './service';
 import { Realtime } from './realtime';
+import { Prisma } from './generated/prisma/client';
 
 async function identity(request: Request, requireCharter = true) {
   const user = await data.authenticate(request.headers.authorization?.replace(/^Bearer /, ''));
@@ -55,12 +56,11 @@ class Errors implements ExceptionFilter {
       response.status(error.getStatus()).json({ message: error.message });
       return;
     }
-    const code = (error as { code?: string })?.code;
-    if (code === '23505') {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       response.status(409).json({ message: 'Ce nom est deja utilise' });
       return;
     }
-    if (code === '23503') {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
       response.status(404).json({ message: 'Profil introuvable' });
       return;
     }
@@ -71,8 +71,14 @@ class Errors implements ExceptionFilter {
 @Controller()
 class ApiController {
   @Get('health') async health() {
-    await pool.query('SELECT PostGIS_Version()');
-    return { status: 'ok', database: 'postgis', demo: config.demo };
+    await prisma.$queryRaw`SELECT PostGIS_Version()`;
+    return { status: 'ok', database: 'postgis' };
+  }
+  @Get('health/live') live() {
+    return { status: 'ok' };
+  }
+  @Get('health/ready') ready() {
+    return this.health();
   }
   @Post('auth/register') register(@Body() body: unknown) {
     return data.register(registerSchema.parse(body));
@@ -154,10 +160,11 @@ class ApiController {
   @Post('devices/push-token') async push(@Req() req: Request, @Body() body: unknown) {
     const id = await identity(req);
     const input = pushSchema.parse(body);
-    await pool.query(
-      'INSERT INTO push_tokens(user_id,token,platform) VALUES($1,$2,$3) ON CONFLICT(token) DO UPDATE SET user_id=EXCLUDED.user_id,platform=EXCLUDED.platform,updated_at=now()',
-      [id, input.token, input.platform],
-    );
+    await prisma.pushToken.upsert({
+      where: { token: input.token },
+      create: { userId: id, token: input.token, platform: input.platform },
+      update: { userId: id, platform: input.platform, updatedAt: new Date() },
+    });
     return { success: true };
   }
   @Post('users/:id/block') async block(@Req() req: Request, @Param('id') peer: string) {
@@ -173,18 +180,16 @@ class ApiController {
     const id = await identity(req);
     const { reason } = z.object({ reason: z.string().trim().min(3).max(1000) }).parse(body);
     await data.assertPeer(id, uuid(peer));
-    await pool.query('INSERT INTO reports(reporter_id,reported_id,reason) VALUES($1,$2,$3)', [
-      id,
-      peer,
-      reason,
-    ]);
+    await prisma.report.create({ data: { reporterId: id, reportedId: uuid(peer), reason } });
     return { success: true };
   }
 }
 @Module({ controllers: [ApiController] })
 class AppModule {}
-const app = await NestFactory.create(AppModule);
-app.use(helmet());
+const app = await NestFactory.create(AppModule, { bodyParser: true });
+if (config.trustProxyHops > 0)
+  app.getHttpAdapter().getInstance().set('trust proxy', config.trustProxyHops);
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
   rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }),
 );
@@ -193,14 +198,16 @@ app.use('/auth', rateLimit({ windowMs: 60_000, limit: 10 }));
 app.enableCors({ origin: config.origins });
 app.useGlobalFilters(new Errors());
 const realtime = new Realtime(app.getHttpServer());
-await pool.query('SELECT PostGIS_Version()');
+await prisma.$connect();
+await prisma.$queryRaw`SELECT PostGIS_Version()`;
+realtime.start();
 await app.listen(config.port, '0.0.0.0');
-console.log(`NearMe API listening on http://localhost:${config.port}; demo=${config.demo}`);
+console.log(`NearMe API listening on port ${config.port}; environment=${config.nodeEnv}`);
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
   process.once(signal, () => {
     realtime.close();
     void app
       .close()
-      .then(() => pool.end())
+      .then(() => prisma.$disconnect())
       .then(() => process.exit(0));
   });

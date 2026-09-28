@@ -1,12 +1,12 @@
 # NearMe
 
-A working French-language, map-first social POC for iOS and Android. Create a profile, accept the community charter, find people within 50-5000 meters, and start a persisted real-time conversation. A web preview runs the same screens with Leaflet in place of native maps.
+A French-language, map-first social application for iOS and Android. Create a profile, accept the community charter, find people within 50-5000 meters, and start a persisted real-time conversation. A web preview runs the same screens with Leaflet in place of native maps.
 
 ## Stack
 
 - pnpm TypeScript monorepo: `apps/mobile`, `apps/api`, `packages/shared`.
 - Expo SDK 57, React Native 0.86.3, React 19.2.3, Expo Router, native maps, location, notifications, SecureStore, Zustand and TanStack Query.
-- NestJS 12, Socket.IO, `pg`, PostgreSQL 17 / PostGIS 3.5.
+- NestJS 12, Socket.IO, Prisma ORM 7, PostgreSQL 17 / PostGIS 3.5.
 - Zod shared validation; Node test runner and Playwright.
 
 Versions were checked against npm and aligned with `expo install --fix`. Use the committed lockfile for reproducible installations. TypeScript 6 is selected for compatibility with typescript-eslint; the newer TypeScript 7 was outside its supported peer range.
@@ -15,20 +15,18 @@ No Bluetooth. No Firebase database, authentication, analytics, or application SD
 
 ## Quick start (Windows / PowerShell)
 
-Prerequisites: current Node LTS (22.12+ or 24 recommended), pnpm 10.28+, Docker Desktop with Linux containers. This workspace was validated using Node 25.9.0. Android native builds also require Android Studio, Android SDK and JDK 17. Local iOS builds require macOS/Xcode; EAS cloud builds can be initiated from Windows.
+Prerequisites: Node.js 22.12+ or 24.x (24.x recommended for Prisma), pnpm 10.28+, Docker Desktop with Linux containers. The local app was previously exercised with Node 25.9, but that version is outside Prisma's supported production runtime range; use Node 24 for deployment. Android native builds also require Android Studio, Android SDK and JDK 17. Local iOS builds require macOS/Xcode; EAS cloud builds can be initiated from Windows.
 
 ```powershell
 pnpm install --frozen-lockfile
 Copy-Item .env.example .env
-Copy-Item apps/api/.env.example apps/api/.env
-Copy-Item apps/mobile/.env.example apps/mobile/.env
 docker compose up -d --wait
 pnpm db:migrate
 pnpm db:seed
 pnpm dev
 ```
 
-Existing local `.env` files are already configured for this POC. Do not overwrite them when you have added credentials. `pnpm dev` starts API and Expo together. Alternatively:
+All local API and Expo settings live in the root `.env`; both apps load it automatically. The API and mobile `.env.example` files have been consolidated into the root template. Do not overwrite an existing `.env` after adding credentials. `pnpm dev` starts API and Expo together. Alternatively:
 
 ```powershell
 pnpm --filter @nearme/api dev
@@ -42,7 +40,7 @@ API: http://localhost:3000/health. Expo/browser: http://localhost:8081. Docker p
 
 For a detached Windows preview after database setup, run `./scripts/start-local.ps1`. It selects free ports, starts hidden API/Expo processes, and writes logs and process IDs under `artifacts/`. Run `./scripts/stop-local.ps1` to stop those recorded processes. The detached preview disables Metro live watching; use `pnpm dev` while editing. Stop the preview before running `pnpm dev` on the same ports.
 
-Migration runner executes sorted SQL files transactionally with an advisory lock and `schema_migrations` ledger. Reruns are safe. Seed reruns update the same five profiles.
+Prisma Migrate is the source of truth for database changes. A fresh database is initialized with `pnpm db:migrate`; later migrations are applied with the same command. For a database created by the old runner, back it up, inspect it, run `pnpm db:baseline` once, then `pnpm db:migrate`. Baselining records the existing schema without replaying table-creation SQL. Never run `db:baseline` against an empty database. Seed reruns update the same five profiles.
 
 ## Accounts
 
@@ -50,25 +48,29 @@ On a new install, choose **Se connecter** or **Créer un compte**. Accounts use 
 
 ## Environment
 
-| Variable                     | Location                 | Purpose                                                                         |
-| ---------------------------- | ------------------------ | ------------------------------------------------------------------------------- |
-| `DATABASE_URL`               | API `.env`               | PostgreSQL connection string                                                    |
-| `PORT`                       | API `.env`               | API port, default 3000                                                          |
-| `DEMO_MODE`                  | API `.env`               | Explicitly enable demo seed and replies; forced off under `NODE_ENV=production` |
-| `CORS_ORIGINS`               | API `.env`               | Comma-separated browser origins; native clients do not require CORS             |
-| `EXPO_ACCESS_TOKEN`          | API `.env`               | Optional enhanced Expo push security token                                      |
-| `EXPO_PUBLIC_API_URL`        | Mobile `.env`            | API URL reachable from this device                                              |
-| `EXPO_PUBLIC_DEMO_MODE`      | Mobile `.env`            | Show Bordeaux fallback and request isolated seed profiles                       |
-| `EXPO_PUBLIC_CARTO_API_KEY`  | Mobile `.env`            | Public CARTO raster tile key used by the web map                                |
-| `EXPO_PUBLIC_EAS_PROJECT_ID` | Mobile `.env`            | Your actual EAS project UUID, required for Expo push token                      |
-| `GOOGLE_MAPS_API_KEY`        | Mobile/build environment | Android Maps SDK key restricted by package/signing certificate                  |
-| `GOOGLE_SERVICES_JSON`       | Mobile/build environment | Path to Android FCM configuration file                                          |
+| Variable                     | Scope          | Purpose                                                                         |
+| ---------------------------- | -------------- | ------------------------------------------------------------------------------- |
+| `DATABASE_URL`               | API            | PostgreSQL connection string                                                    |
+| `DATABASE_POOL_MAX`          | API            | Maximum PostgreSQL connections per API process                                  |
+| `PORT`                       | API            | API port, default 3000                                                          |
+| `DEMO_MODE`                  | API            | Explicitly enable demo seed and replies; forced off under `NODE_ENV=production` |
+| `CORS_ORIGINS`               | API            | Comma-separated browser origins; native clients do not require CORS             |
+| `TRUST_PROXY_HOPS`           | API            | Exact trusted proxy hops when running behind a reverse proxy                    |
+| `EXPO_ACCESS_TOKEN`          | API            | Optional enhanced Expo push security token                                      |
+| `EXPO_PUBLIC_API_URL`        | Expo app       | API URL reachable from this device                                              |
+| `EXPO_PUBLIC_DEMO_MODE`      | Expo app       | Show Bordeaux fallback and request isolated seed profiles                       |
+| `EXPO_PUBLIC_CARTO_API_KEY`  | Expo app       | Public CARTO raster tile key used by the web map                                |
+| `EXPO_PUBLIC_EAS_PROJECT_ID` | Expo app       | Your actual EAS project UUID, required for Expo push token                      |
+| `GOOGLE_MAPS_API_KEY`        | Expo app/build | Android Maps SDK key restricted by package/signing certificate                  |
+| `GOOGLE_SERVICES_JSON`       | Expo app/build | Path to Android FCM configuration file                                          |
+
+The API and Expo app both load these variables from the repository-root `.env`. Keep that file local and untracked. Values prefixed with `EXPO_PUBLIC_` are embedded in the app bundle and must not contain private secrets.
 
 The only built-in password is for the loopback-only development database. No production secret is embedded. A production build requires a reachable HTTPS API and proper infrastructure, credentials and operational hardening.
 
 ## Android
 
-1. Set `EXPO_PUBLIC_API_URL=http://YOUR_PC_LAN_IP:3000` for a phone, or `http://10.0.2.2:3000` for the standard Android emulator. Find the computer IPv4 with `ipconfig`.
+1. Set `EXPO_PUBLIC_API_URL=http://YOUR_PC_LAN_IP:3000` in the root `.env` for a phone, or `http://10.0.2.2:3000` for the standard Android emulator. Find the computer IPv4 with `ipconfig`.
 2. Enable Maps SDK for Android in Google Cloud. Set `GOOGLE_MAPS_API_KEY`, restrict it to `com.nearme.poc` and your signing SHA-1. Without this key the Android native map may be blank; the browser preview remains usable.
 3. Connect a phone with USB debugging, or start an Android Studio emulator.
 4. Run `pnpm --filter @nearme/mobile android`. Expo generates native sources and builds the development client.
@@ -134,15 +136,15 @@ Real Expo push integration lives in `apps/api/src/push.ts`, behind `PushNotifica
 - Backend needs outbound HTTPS access to Expo Push Service. Enhanced push security, if enabled, requires `EXPO_ACCESS_TOKEN` server-side.
 - Delivery is suppressed if any connected device for the recipient is actively viewing that conversation. Inactive or disconnected recipients get push. Foreground banners are suppressed for the currently open chat.
 - Both cold-start and running-app notification taps route to `/chat/:conversationId`; membership is still validated by the API.
-- Invalid/unregistered tokens are removed based on Expo tickets and receipts. Receipt lookup is scheduled 15 minutes later. Network errors are logged without rolling back saved messages.
+- Invalid/unregistered tokens are removed based on Expo tickets and receipts. Receipt lookup is persisted and scheduled 15 minutes later. Notification jobs are committed atomically with messages, retried with backoff, and resumed by a database-backed worker after restart. Notifications contain no message preview. Delivery is at-least-once: a process crash after Expo accepts a push but before its ticket is stored can cause a duplicate.
 
-POC limitation: push jobs/receipt timers are in-process, not a durable queue, so an API restart can lose a notification attempt. Add a transactional outbox and worker before production. Actual APNs/FCM device delivery is not validated by bundle compilation or browser tests.
+Real APNs/FCM device validation is still required before public launch.
 
 Official references: [Expo notification support](https://docs.expo.dev/versions/latest/sdk/notifications/), [push setup](https://docs.expo.dev/push-notifications/push-notifications-setup/), [Expo SDK 57](https://expo.dev/sdk/57).
 
 ## Architecture and protocol
 
-`DataService` owns user, geospatial and conversation rules. REST controllers authenticate opaque bearer tokens; SHA-256 token hashes are stored in PostgreSQL. Raw tokens are returned only at registration. Native storage is SecureStore; browser preview uses local storage through AsyncStorage and is development-only. This POC intentionally has no account recovery or cross-device sign-in.
+`DataService` owns user, geospatial and conversation rules. Prisma Client handles relational reads, writes, and transactions. Parameterized PostgreSQL queries remain for PostGIS geography and read paths that use LATERAL joins or microsecond-stable cursors. REST controllers authenticate opaque bearer tokens; only SHA-256 token hashes are stored. Tokens expire after 30 days. Raw tokens are returned only at registration/login. Native storage is SecureStore; browser preview uses local storage through AsyncStorage and is development-only. Accounts still have no recovery or cross-device session management.
 
 Discovery uses the caller's stored position, not arbitrary query coordinates. `ST_DWithin` operates on indexed `geography(Point,4326)`; `ST_Distance` sorts results. Server enforces 50-5000 m, blocks both directions, visibility and 12-minute expiry. Third-party marker coordinates are rounded to 3 decimals. Distances are approximate in the UI; positions never appear as text. Quantization alone is not production anti-triangulation protection.
 
@@ -163,7 +165,7 @@ Socket authentication uses the same bearer token, with charter acceptance requir
 
 Every client event returns `{ ok: true, data }` or `{ ok: false, error }`. Socket.IO acknowledgment is the delivery acknowledgment; no extra redundant `message:ack` event. Message `clientId` ensures retries do not create duplicates. Conversation pair keys and unique constraints deduplicate concurrent requests. History uses stable `(created_at,id)` cursors, 50 per page.
 
-Nearby refreshes are coalesced over 300 ms and periodically expire stale entries every 15 seconds. Results are sent only to subscribers after their server-side query; raw GPS is never globally broadcast. This single-process POC recomputes active subscriber queries on changes. At scale use spatial subscription buckets, Redis adapter and bounded workers.
+Nearby refreshes are coalesced over 300 ms and periodically expire stale entries every 15 seconds. Results are sent only to subscribers after their server-side query; raw GPS is never globally broadcast. The API recomputes active subscriber queries on changes. At scale use spatial subscription buckets, a Redis adapter and bounded workers.
 
 REST endpoints are discoverable in `apps/api/src/main.ts`. Reports are persisted for later moderation; no moderation dashboard or emergency-response promise is included.
 
@@ -187,18 +189,23 @@ Integration tests use real PostGIS and running Nest/Socket.IO: charter/auth gate
 
 UI checks exercise profile creation, disabled consent button, permission-driven location, radius changes, loaded map tiles/avatars, marker-to-profile navigation, actual chat reply, reload persistence and invisibility. Screenshots/traces go in `artifacts/` (gitignored).
 
-See `VALIDATION.md` for observed results and remaining device-only checks. No iOS/Xcode build success or physical push delivery is implied by JavaScript export.
+The Node unit and PostGIS integration suites cover the API and its real-time flows. Physical-device push delivery and iOS/Xcode builds still require their platform credentials and hardware; JavaScript checks do not claim those validations.
 
-## POC boundaries
+## Before a public launch
 
-- Single API process; no HA, durable push queue, account recovery or comprehensive abuse moderation.
-- Light theme intentionally polished first; no partial dark-mode styling.
+- The API is ready to run as one instance. Online presence, Socket.IO rooms, and HTTP rate limits are process-local; HTTP rate limits reset on restart. Add a shared Redis adapter/store before running multiple replicas or requiring shared rate limits.
+- Push jobs and Expo receipt checks are durable in PostgreSQL. Delivery is at-least-once around the external Expo call, and actual APNs/FCM delivery still needs physical-device validation.
+- There is no account recovery or verified contact address. Do not launch publicly until a recovery flow and support path exist.
+- Replace the development app identifiers (`com.nearme.poc`) with identifiers owned by the publisher before store distribution; configure signing, store listings, and production EAS credentials.
+- Add an operational moderation and abuse-response process. Reporting currently stores reports but does not provide a moderation console or response workflow.
 - Avatars use public placeholder portraits from Pravatar. No uploaded personal photos are required. Native maps use platform providers; web map tiles use CARTO/OpenStreetMap with attribution. These external assets require internet; no user coordinates are placed in avatar URLs.
-- Approximate location is still sensitive. Production needs stronger privacy controls, retention/deletion policy, consent review, abuse limits and moderation before public release.
+- Approximate location is sensitive, and the current three-decimal marker rounding may allow triangulation across repeated updates. Before launch, test stronger anti-triangulation controls and decide location retention, consent, deletion and access policies with the named data controller; the in-app charter is not a substitute for legal review.
+- HTTPS hosting, a managed database with tested backups/PITR, monitoring/alerting, incident response, APNs/FCM credentials, and a deployment pipeline remain external setup and release work. This repository cannot validate a live production environment.
 - A development endpoint can place its own demo profiles but is unavailable in production. Disable both demo flags for real-use deployments.
+
 # Configure Expo Go on your local network
 
-To test the app on a phone with Expo Go, connect both the phone and the computer hosting the API to the same Wi-Fi network. Expo Go cannot reach an API at `localhost` or `127.0.0.1`; those addresses refer to the phone itself. Find your computer's local IPv4 address (for example, run `ipconfig` on Windows), then set it in `apps/mobile/.env`:
+To test the app on a phone with Expo Go, connect both the phone and the computer hosting the API to the same Wi-Fi network. Expo Go cannot reach an API at `localhost` or `127.0.0.1`; those addresses refer to the phone itself. Find your computer's local IPv4 address (for example, run `ipconfig` on Windows), then set it in the root `.env`:
 
 ```env
 EXPO_PUBLIC_API_URL=http://192.168.1.42:3000
@@ -207,7 +214,7 @@ EXPO_PUBLIC_API_URL=http://192.168.1.42:3000
 Replace `192.168.1.42` with the address shown on your computer, and `3000` with the port actually exposed by the API. Allow incoming connections on that port in your firewall if needed. After changing `.env`, restart Expo and clear its cache:
 
 ```bash
-pnpm --filter @nearme/mobile start -- --clear
+pnpm --filter @nearme/mobile exec expo start --go --clear
 ```
 
 Then scan the QR code with Expo Go. If your computer's IP address changes, update `EXPO_PUBLIC_API_URL` and restart Expo.

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { io, type Socket } from 'socket.io-client';
 import type { Ack, Message, NearbyUser, User } from '@nearme/shared';
 import { BORDEAUX } from '@nearme/shared';
-import { pool } from '../src/db';
+import { prisma } from '../src/db';
 
 const base = process.env.TEST_API_URL ?? 'http://localhost:3000';
 async function request<T>(
@@ -78,6 +78,15 @@ test('real PostGIS + REST + Socket.IO acceptance and safety', { timeout: 45_000 
         );
       await assert.rejects(request('/nearby?radius=500', users[0].token), /403/);
       await assert.rejects(request('/users/me', 'invalid'), /401/);
+      await prisma.user.update({
+        where: { id: users[2].user.id },
+        data: { tokenExpiresAt: new Date(0) },
+      });
+      await assert.rejects(request('/users/me', users[2].token), /401/);
+      await prisma.user.update({
+        where: { id: users[2].user.id },
+        data: { tokenExpiresAt: new Date(Date.now() + 86_400_000) },
+      });
       for (const user of users) await request('/users/me/charter', user.token, {});
       assert.equal((await request<User>('/users/me', users[0].token)).charterAccepted, true);
     });
@@ -118,10 +127,7 @@ test('real PostGIS + REST + Socket.IO acceptance and safety', { timeout: 45_000 
           ),
         );
         await request('/users/me', b.token, { visible: true }, 'PATCH');
-        await pool.query(
-          "UPDATE user_locations SET updated_at=now()-interval '13 minutes' WHERE user_id=$1",
-          [b.user.id],
-        );
+        await prisma.$executeRaw`UPDATE user_locations SET updated_at=now()-interval '13 minutes' WHERE user_id=${b.user.id}::uuid`;
         assert.ok(
           !(await request<NearbyUser[]>('/nearby?radius=200', a.token)).some(
             (u) => u.id === b.user.id,
@@ -189,6 +195,11 @@ test('real PostGIS + REST + Socket.IO acceptance and safety', { timeout: 45_000 
         const saved = await event<Message>(sa, 'message:send', payload);
         assert.equal((await received).id, saved.id);
         assert.equal(saved.senderId, a.user.id);
+        assert.equal(
+          (await prisma.pushOutbox.findUnique({ where: { messageId: saved.id } }))?.recipientId,
+          b.user.id,
+          'message and durable push job are committed together',
+        );
         assert.equal((await event<Message>(sa, 'message:send', payload)).id, saved.id);
         await assert.rejects(
           event(sc, 'message:send', { ...payload, clientId: randomUUID() }),
@@ -228,10 +239,7 @@ test('real PostGIS + REST + Socket.IO acceptance and safety', { timeout: 45_000 
       async () => {
         const chat = await request<{ id: string }>(`/conversations/with/${c.user.id}`, a.token, {});
         conversations.push(chat.id);
-        await pool.query(
-          `INSERT INTO messages(conversation_id,sender_id,client_id,body,created_at) SELECT $1,$2,gen_random_uuid(),'pagination test','2026-09-08 12:00:00.000123+00' FROM generate_series(1,101)`,
-          [chat.id, a.user.id],
-        );
+        await prisma.$executeRaw`INSERT INTO messages(conversation_id,sender_id,client_id,body,created_at) SELECT ${chat.id}::uuid,${a.user.id}::uuid,gen_random_uuid(),'pagination test','2026-09-08 12:00:00.000123+00' FROM generate_series(1,101)`;
         let cursor: string | null = null;
         const found: string[] = [];
         do {
@@ -268,12 +276,13 @@ test('real PostGIS + REST + Socket.IO acceptance and safety', { timeout: 45_000 
           token: 'ExpoPushToken[test_device]',
           platform: 'ios',
         });
-        const tokens = await pool.query('SELECT platform FROM push_tokens WHERE user_id=$1', [
-          a.user.id,
-        ]);
-        assert.equal(tokens.rows.length, 1);
-        assert.equal(tokens.rows[0].platform, 'ios');
-        await pool.query('DELETE FROM push_tokens WHERE user_id=$1', [a.user.id]);
+        const tokens = await prisma.pushToken.findMany({
+          where: { userId: a.user.id },
+          select: { platform: true },
+        });
+        assert.equal(tokens.length, 1);
+        assert.equal(tokens[0].platform, 'ios');
+        await prisma.pushToken.deleteMany({ where: { userId: a.user.id } });
       },
     );
     await t.test('report persists; block removes discovery and prevents messages', async () => {
@@ -292,13 +301,12 @@ test('real PostGIS + REST + Socket.IO acceptance and safety', { timeout: 45_000 
     });
   } finally {
     sockets.forEach((s) => s.disconnect());
-    await pool.query('DELETE FROM conversations WHERE id=ANY($1::uuid[])', [conversations]);
+    await prisma.conversation.deleteMany({ where: { id: { in: conversations } } });
     const ids = users.map((u) => u.user.id);
-    await pool.query(
-      'DELETE FROM reports WHERE reporter_id=ANY($1::uuid[]) OR reported_id=ANY($1::uuid[])',
-      [ids],
-    );
-    await pool.query('DELETE FROM users WHERE id=ANY($1::uuid[])', [ids]);
-    await pool.end();
+    await prisma.report.deleteMany({
+      where: { OR: [{ reporterId: { in: ids } }, { reportedId: { in: ids } }] },
+    });
+    await prisma.user.deleteMany({ where: { id: { in: ids } } });
+    await prisma.$disconnect();
   }
 });

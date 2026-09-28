@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, router } from 'expo-router';
 import type { User } from '@nearme/shared';
-import { api } from '../src/api';
+import { api, disconnectSocket, queryClient } from '../src/api';
 import { useApp } from '../src/state';
 import { Button, colors, ErrorText, GlassSurface, Icon, s, type IconName } from '../src/ui';
 const points: [IconName, string, string][] = [
@@ -37,6 +37,7 @@ export default function Charter() {
   const user = useApp((state) => state.user);
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<unknown>(null);
   if (!user) return <Redirect href="/onboarding" />;
   if (user.charterAccepted) return <Redirect href="/(tabs)" />;
@@ -49,6 +50,20 @@ export default function Charter() {
       setError(e);
     } finally {
       setBusy(false);
+    }
+  }
+  async function signOut() {
+    setSigningOut(true);
+    setError(null);
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {
+      // Always clear a stale local session, even if the server rejects its token.
+    } finally {
+      disconnectSocket();
+      queryClient.clear();
+      await useApp.getState().clearSession();
+      router.replace('/onboarding');
     }
   }
   return (
@@ -107,6 +122,13 @@ export default function Charter() {
           disabled={!checked}
           loading={busy}
           onPress={() => void accept()}
+        />
+        <Button
+          title="Déconnexion"
+          secondary
+          icon="log-out-outline"
+          loading={signingOut}
+          onPress={() => void signOut()}
         />
       </ScrollView>
     </SafeAreaView>

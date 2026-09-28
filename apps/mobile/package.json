@@ -19,6 +19,7 @@
     "@react-native/metro-config": "0.86.3",
     "@tanstack/react-query": "latest",
     "expo": "57.0.20",
+    "dotenv": "17.4.2",
     "expo-build-properties": "~57.0.17",
     "expo-constants": "latest",
     "expo-crypto": "latest",

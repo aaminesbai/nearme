@@ -8,6 +8,7 @@ import {
   pointSchema,
   radiusSchema,
   type Ack,
+  type Message,
   type User,
 } from '@nearme/shared';
 import { config } from './config';
@@ -28,9 +29,25 @@ export class Realtime {
   private push = new PushNotificationService();
   private pending?: ReturnType<typeof setTimeout>;
   private refreshing = false;
-  private timer: ReturnType<typeof setInterval>;
+  private timer?: ReturnType<typeof setInterval>;
   constructor(server: HttpServer) {
     this.io = new Server(server, { cors: { origin: config.origins }, maxHttpBufferSize: 16_384 });
+    this.configureAuth();
+  }
+  start() {
+    this.push.start(
+      (userId, conversationId) =>
+        needsPush(
+          userId,
+          conversationId,
+          [...this.io.sockets.sockets.values()].map((socket) => {
+            const session = socket.data as Session;
+            return { userId: session.user.id, activeConversation: session.activeConversation };
+          }),
+        ) === false,
+    );
+  }
+  private configureAuth() {
     this.io.use(async (socket, next) => {
       try {
         const user = await data.authenticate(socket.handshake.auth.token);
@@ -97,7 +114,7 @@ export class Realtime {
     this.handle(socket, 'message:send', messageSchema, async (input) => {
       const result = await data.send(state.user.id, input);
       if (result.fresh) {
-        await this.deliver(result.message, result.peer, state.user);
+        await this.deliver(result.message, result.peer);
         const peer = await data.me(result.peer);
         if (config.demo && peer.isDemo) {
           this.io.to(`chat:${input.conversationId}`).emit('typing:update', {
@@ -160,12 +177,8 @@ export class Realtime {
         );
     });
   }
-  private async deliver(
-    message: Parameters<PushNotificationService['sendMessage']>[2],
-    peer: string,
-    sender: User,
-  ) {
-    this.io.to(`user:${peer}`).to(`user:${sender.id}`).emit('message:new', message);
+  private async deliver(message: Message, peer: string) {
+    this.io.to(`user:${peer}`).to(`user:${message.senderId}`).emit('message:new', message);
     const notify = needsPush(
       peer,
       message.conversationId,
@@ -175,10 +188,7 @@ export class Realtime {
       }),
     );
     if (!notify) await data.read(peer, message.conversationId);
-    else
-      void this.push
-        .sendMessage(peer, sender.displayName, message)
-        .catch(() => console.error('Push dispatch failed'));
+    // A transactional outbox row was committed with the message; the worker delivers it.
   }
   private async demoReply(peer: User, recipient: string, conversationId: string) {
     const reply = await data.send(peer.id, {
@@ -186,7 +196,7 @@ export class Realtime {
       clientId: randomUUID(),
       body: 'Salut ! Partant pour une balade sur les quais ?',
     });
-    await this.deliver(reply.message, recipient, peer);
+    await this.deliver(reply.message, recipient);
     this.io
       .to(`chat:${conversationId}`)
       .emit('typing:update', { conversationId, userId: peer.id, typing: false });
@@ -237,7 +247,8 @@ export class Realtime {
     }
   }
   close() {
-    clearInterval(this.timer);
+    this.push.close();
+    if (this.timer) clearInterval(this.timer);
     if (this.pending) clearTimeout(this.pending);
     this.io.close();
   }

@@ -11,6 +11,8 @@
     "test": "pnpm --filter @nearme/api test",
     "test:integration": "pnpm --filter @nearme/api test:integration",
     "db:migrate": "pnpm --filter @nearme/api migrate",
+    "db:migrate:dev": "pnpm --filter @nearme/api migrate:dev",
+    "db:baseline": "pnpm --filter @nearme/api migrate:baseline",
     "db:seed": "pnpm --filter @nearme/api seed"
   },
   "devDependencies": {
